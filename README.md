@@ -1,2 +1,10 @@
 # NanostringR
 A simply R package to analyze Nanostring data. This package follows the guidelines from a previously published manuscript called: An approach for normalization and quality control for NanoString RNA expression data. (https://pubmed.ncbi.nlm.nih.gov/32789507/). Some packages references by this article were no longer maintained, these pacakges have been migrated into this one. None of their code has been altered from the original and full credit goes to them. Specifically this is for the packages NanoStringNorm (https://pmc.ncbi.nlm.nih.gov/articles/PMC3356845/) and nanostringQCPro(https://bioconductor.statistik.tu-dortmund.de/packages/3.1/bioc/html/NanoStringQCPro.html)
+
+
+## Installation
+Installation can be done via devtools with the following command
+``` r
+install.packages("devtools")
+devtools::install_github("Ylefol/NanostringR@master")
+```
