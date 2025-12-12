@@ -1,0 +1,193 @@
+---
+title: "Interferon Gene Signature Analysis"
+author: "Yohan Lefol"
+date: '`r format(Sys.Date(), "%d. %B %Y")`'
+bibliography: references.bib
+header-includes:
+  - \usepackage{float}
+  - \usepackage{fvextra}
+  - \fvset{breaklines}
+output: 
+  pdf_document:
+    latex_engine: pdflatex
+    toc: true
+    toc_depth: 3
+---
+  
+  
+```{r knitr_setup, include=FALSE}
+#Libraries for report
+library(knitr)
+library(NanostringR)
+library(formatR)
+library(plyr)
+library(gtools)
+library(pander)
+options(width=60)
+opts_chunk$set(comment = "", warning = FALSE, message = TRUE, echo = TRUE, tidy = FALSE, size="small")
+
+#Load data processing libraries
+library(MASS)
+library(RUVSeq)
+library(DESeq2)
+library(matrixStats)
+
+#Load plotting libraries
+library(RColorBrewer)
+library(ggplot2)
+library(reshape2)
+library(ggrepel)
+library(grid)
+library(gridExtra)
+#For better table representation in rmarkdown
+library(kableExtra)
+
+#Load relevant functions
+# source('nanostring_RUV_functions.R')
+# source('nanostring_YL_functions.R')
+
+```
+
+## Parameter set up
+Set the below parameters for the downstream analysis
+
+```{r parameter_setup}
+#Provide path to data and sample file
+target_path='~/A_Projects/seq-toolbox/NanostringR/data/FUNKIS/RCCData/'
+sample_sheet<-read.csv('~/A_Projects/seq-toolbox/NanostringR/data/FUNKIS/samp_sheet_no_PBMC.csv')
+
+#Some formatting
+group_names_vector<-paste0(target_path,sample_sheet$Sample,'.RCC')
+names(group_names_vector)<-sample_sheet$Group
+reference_name<-'Kontroll'
+
+#Create directory for result storage
+#Append the current date to the results folder
+res_name<-paste0('nanostring_results_',Sys.Date(),'/')
+dir.create(res_name)
+```
+\pagebreak
+
+## Quality Control
+The quality control used in this report is based on a 2021 article written by [@bhattacharya2021approach].
+This work makes use of two prior preprocessing and QC packages; [@waggott2012nanostringnorm] and [@NanostringQCPro]
+
+Briefly, it covers the basic quality control expected for Nanostring data, however it also takes a few extra steps
+in the form of verifying that endogenous (non-housekeeping) genes do not fall below detection levels as well as
+verifying that house-keeping genes do not correlate with the condition being tested.
+To elaborate on the last statement, if the expression of house-keeping genes are found to correlate with the 
+tested condition, using these genes for data normalization may lead to inaccurate results.
+If such genes are found, they will be excluded from use in data normalization.
+
+Normalization is performed using RUVseq[@risso2014normalization], a package designed to remove unwanted variation within the data.
+
+```{r Quality_Control}
+#Run basic quality control
+RUV_processed_dta<-QC_plus_RUV_processing(guide_vect=group_names_vector,
+                                          ref_name=reference_name,
+                                          remove_failed_HK=TRUE)
+#Extract QC data and feature data
+QC_data<-pData(RUV_processed_dta$set)
+```
+
+```{r QC_table_mods, include=FALSE}
+#Filter table to show relevant columns in this report, order it for cleanliness
+QC_data$Lane<-row.names(QC_data)
+QC_data_show<-merge(QC_data,sample_sheet[,c('Sample','Lane')])
+row.names(QC_data_show)=QC_data_show$Lane
+QC_data_show <- QC_data_show[mixedorder(QC_data_show$Lane), ]
+
+QC_data_show<-QC_data_show[,c('Sample','Group','imagingQC','bindingDensityQC',
+                    'limitOfDetectionQC','positiveLinearityQC','EndogenousLod',
+                    'HKLod')]
+colnames(QC_data_show)<-c('Sample','Group','imagingQC','BD_QC',
+                    'Lod_QC','PL_QC','Endo_Lod',
+                    'HK_Lod')
+```
+\pagebreak
+
+### Quality Control results
+Below we show the quality control results. Each column is briefly explained in the following text. For a more detailed explanation
+please see [@bhattacharya2021approach]
+
+**imagingQC**\: Measure of the percentage of requested field of view successfully scanned in each cartridge.  
+**B(inding)D(ensity)\_QC**\: Measure of reporter probe density on the cartridge surface within each sample lane.  
+**L(imit)o(f)d(detection)\_QC**\: Measure of correlation between the counts observed for the positive ERCC probes and the concentrations of the spike-in synthetic target nucleic acids.  
+**P(ositive)L(inearity)\_QC**\: Checks if the counts for the control probes and target sequences are significantly above the negative control probes.  
+**Endo(genous)\_Lod**\: Flagged samples has several endogenous genes below the limit of detection.  
+**H(ouse)K(eeping)\_Lod**\: Flagged samples had several house-keeping genes below the limit of detection.  
+`r kable(QC_data_show, caption = "QC results") %>% kable_styling(latex_options = c("scale_down","HOLD_position"), font_size = 8)`
+
+\pagebreak
+
+## Principal Component Analysis
+To overview the data we create a PCA plot. The PCA shows principal components 1 and 2 along with the percentage of variation for which
+they account. The PCA is computed using the top 500 most variable genes. If there are not 500 genes, it will use all the genes available. Coloring of sample names is based on the group to which they belong (Pasient or Kontroll).
+```{r PCA}
+# Extract necessary data
+set<-RUV_processed_dta$set
+# Get group names and the required amount of colors 
+x <- as.factor(QC_data$Group)
+colors <- brewer.pal(2, "Set2")
+#create the PCA
+plotPCA(set,col=colors[x])
+```
+```{r save_PCA, include=FALSE}
+#Save the plot
+png(filename = paste0(res_name, 'summary_PCA.png'),
+    width = 2000, height = 2000, res = 300)
+plotPCA(set, col = colors[x])
+dev.off()
+```
+\pagebreak
+
+##  IFN-stimulated genes
+The genes used for the  IFN-stimulated genes (ISG) were identified/published by [@kim2018development]. The exact genes can be seen in the code chunk below, associated to the 'IS_genes' variable. If some of the IS genes are not found a message will indicated which genes are not present in the nanostring data.
+```{r ISG}
+#ISG score
+IS_genes<-c('CXCL10','DDX60','EPSTI1','GBP1','HERC6','HERC5','IFI27','IFI44',
+             'IFI44L','IFI6','IFIT1','IFIT2','IFIT3','IFIT5','ISG15','LAMP3',
+             'LY6E','MX1','OAS1','OAS2','OAS3','OASL','RSAD2','RTP4','SIGLEC1',
+             'SOCS1','SPATS2L','USP18')
+#Retrieve normalized counts
+normalized_counts<-set@assayData$normalizedCounts
+#Calculate geoscores and create a boxplot for all patients
+returned_list<-analysis_with_geneset(main_data=normalized_counts,target_genes=IS_genes,
+                                     sample_data=sample_sheet, group_name='ISG',save_loc=res_name)
+```
+
+\pagebreak
+
+###  IFN-stimulated genes - boxplot of gene expression
+The boxplot below shows the IFN-stimulated gene expression profile for each sample, with controls shown as blue and patients as red. The expression is obtained from the RUVseq normalized counts. This plot serves as an overview of gene expression profiled for each sample and may be beneficial in explaining the results found for individual patients (seen below).
+```{r ISG boxplot}
+returned_list$boxplot
+```
+
+###  IFN-stimulated genes - Geoscore results per patient
+The plots below illustrate the geomean score for each patients compared with the quantiles of the geomean score of the controls. The quantiles are delineated by dashed lines (marking the 0, 25th, 75th, and 100th limits), the solid line marks the 50th percentile. Small text in the quantile area indicates which quantile range that zone represents. Samples which fall outside these ranges are assumed to exit the scope of what is considered to be a healthy control.
+```{r indiv_patient_results,results='asis', fig.height=10, fig.width=8}
+plots_and_table_wrapper(res_list=returned_list,samp_sheet=sample_sheet,
+                        norm_counts=normalized_counts,target_genes=IS_genes,
+                        save_loc=res_name)
+```
+
+
+
+```{r save_data, include=FALSE}
+#convert normalized counts to dataframe and save as csv
+normalized_counts<-as.data.frame(normalized_counts)
+write.csv(normalized_counts,paste0(res_name,'normalized_counts.csv'))
+write.csv(QC_data,paste0(res_name,'QC_results.csv'))
+```
+
+\pagebreak
+
+## References
+<div id="refs"></div>
+
+## Session information
+\small
+```{r rsession}
+pander(sessionInfo())
+```
