@@ -1,16 +1,32 @@
 Package: NanostringR
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Quality Control and Normalization for NanoString Gene Expression Data
 Version: 0.1.0
-Authors@R: c(
-    person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
-    )
-  )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+Authors@R: person("Yohan", "Lefol", role = c("aut", "cre"), email = "yohan.lefol@gmail.com")
+Description: Provides quality control and normalization tools for NanoString nCounter
+    gene expression data, following the guidelines described in Bhattacharya et al.
+    (2021) <https://pubmed.ncbi.nlm.nih.gov/32789507/>. This package consolidates
+    two packages that are no longer actively maintained: NanoStringNorm (Waggott et
+    al., 2012, <https://pmc.ncbi.nlm.nih.gov/articles/PMC3356845/>) and
+    NanoStringQCPro (Bioconductor). Their source code is included verbatim and all
+    credit for those contributions belongs to the original authors. Custom functions
+    built on top of these support clinical reporting workflows, including RUV-based
+    normalization and nSolver-equivalent normalization for longitudinal sample
+    analysis.
+License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
+RoxygenNote: 7.3.3
+Imports:
+    MASS,
+    ggplot2,
+    ggrepel,
+    reshape2,
+    plyr,
+    gridExtra,
+    knitr,
+    RUVSeq,
+    DESeq2,
+    limma,
+    Biobase,
+    matrixStats

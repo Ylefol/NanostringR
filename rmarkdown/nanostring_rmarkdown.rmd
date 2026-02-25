@@ -53,8 +53,8 @@ Set the below parameters for the downstream analysis
 
 ```{r parameter_setup}
 #Provide path to data and sample file
-target_path='~/A_Projects/seq-toolbox/NanostringR/data/FUNKIS/RCCData/'
-sample_sheet<-read.csv('~/A_Projects/seq-toolbox/NanostringR/data/FUNKIS/samp_sheet_no_PBMC.csv')
+target_path='~/A_Projects/NanostringR/data/FUNKIS/RCCData/'
+sample_sheet<-read.csv('~/A_Projects/NanostringR/data/FUNKIS/samp_sheet_no_PBMC.csv')
 
 #Some formatting
 group_names_vector<-paste0(target_path,sample_sheet$Sample,'.RCC')
@@ -83,11 +83,12 @@ Normalization is performed using RUVseq[@risso2014normalization], a package desi
 
 ```{r Quality_Control}
 #Run basic quality control
-RUV_processed_dta<-QC_plus_RUV_processing(guide_vect=group_names_vector,
+nsn_results<-QC_plus_nSolver_processing(guide_vect=group_names_vector,
                                           ref_name=reference_name,
-                                          remove_failed_HK=TRUE)
+                                          controls_only_norm = TRUE,
+                                          remove_failed_HK=FALSE)
 #Extract QC data and feature data
-QC_data<-pData(RUV_processed_dta$set)
+QC_data <- nsn_results$QCdata
 ```
 
 ```{r QC_table_mods, include=FALSE}
@@ -124,20 +125,13 @@ please see [@bhattacharya2021approach]
 To overview the data we create a PCA plot. The PCA shows principal components 1 and 2 along with the percentage of variation for which
 they account. The PCA is computed using the top 500 most variable genes. If there are not 500 genes, it will use all the genes available. Coloring of sample names is based on the group to which they belong (Pasient or Kontroll).
 ```{r PCA}
-# Extract necessary data
-set<-RUV_processed_dta$set
-# Get group names and the required amount of colors 
-x <- as.factor(QC_data$Group)
-colors <- brewer.pal(2, "Set2")
-#create the PCA
-plotPCA(set,col=colors[x])
+pca_plot <- plot_PCA(normalized_counts = nsn_results$normalized_counts,
+                     QCdata = QC_data)
+pca_plot
 ```
 ```{r save_PCA, include=FALSE}
-#Save the plot
-png(filename = paste0(res_name, 'summary_PCA.png'),
-    width = 2000, height = 2000, res = 300)
-plotPCA(set, col = colors[x])
-dev.off()
+ggsave(filename = paste0(res_name, 'summary_PCA.png'), plot = pca_plot,
+       width = 8, height = 8, dpi = 300)
 ```
 \pagebreak
 
@@ -150,7 +144,7 @@ IS_genes<-c('CXCL10','DDX60','EPSTI1','GBP1','HERC6','HERC5','IFI27','IFI44',
              'LY6E','MX1','OAS1','OAS2','OAS3','OASL','RSAD2','RTP4','SIGLEC1',
              'SOCS1','SPATS2L','USP18')
 #Retrieve normalized counts
-normalized_counts<-set@assayData$normalizedCounts
+normalized_counts<-nsn_results$normalized_counts
 #Calculate geoscores and create a boxplot for all patients
 returned_list<-analysis_with_geneset(main_data=normalized_counts,target_genes=IS_genes,
                                      sample_data=sample_sheet, group_name='ISG',save_loc=res_name)
